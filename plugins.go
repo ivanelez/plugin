@@ -3,9 +3,8 @@ package plugins
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
-	"strings"
+	"math/rand"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -94,88 +93,10 @@ func (p *MyK3SPlugin) Filter(ctx context.Context, state *framework.CycleState, p
 }
 
 func (p *MyK3SPlugin) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
-
-	fmt.Println("--------------------SCORE-------------------------------------")
-	fmt.Println()
-
-	if p.handle == nil {
-		fmt.Println("Handle is null!")
-	}
-
-	//deployments need to have label requestFrom which indicates on which node request for pod has came
-	requestFromNode := pod.Labels["requestFrom"]
-	fmt.Println("Request for application: ", pod.Labels["applicationName"], " came from node: ", requestFromNode)
-
-	nodes, err := p.handle.SnapshotSharedLister().NodeInfos().List()
-	if err != nil {
-		fmt.Println("Error occured while getting all nodes in cluster.")
-	}
-
-	for _, node := range nodes {
-		fmt.Println("NodeName :", node.Node().Name, "Address: ", node.Node().Status.Addresses[0].Address)
-	}
-
-	fmt.Println("Calculating score for current node:", nodeName)
-
-	//Get node from which request came
-	requesterNodeInfo, err := p.handle.SnapshotSharedLister().NodeInfos().Get(requestFromNode)
-	requesterNode := requesterNodeInfo.Node()
-	requesterNodeLabels := requesterNode.GetLabels()
-
-	//map of node names and distances
-	mapNodeNameDistance := make(map[string]int)
-
-	// get labels with node names in cluster and their distances
-	for label, value := range requesterNodeLabels {
-		if strings.HasPrefix(label, "ping-") {
-
-			distanceToNode, err := strconv.Atoi(value)
-			if err != nil {
-				fmt.Println("Error while converting.")
-			}
-
-			nodeName := strings.TrimPrefix(label, "ping-")
-			mapNodeNameDistance[nodeName] = distanceToNode
-		}
-	}
-
-	// Store node distances
-	var sortedNodeDistances []NodeNameDistance
-	for label, value := range mapNodeNameDistance {
-		sortedNodeDistances = append(sortedNodeDistances, NodeNameDistance{label, value})
-	}
-
-	//sort node distances from lowest to highest
-	sort.Slice(sortedNodeDistances, func(i, j int) bool {
-		return sortedNodeDistances[i].Distance < sortedNodeDistances[j].Distance
-	})
-
-	fmt.Println("----------Sorted node distances-------------")
-	for _, nodeNameDistance := range sortedNodeDistances {
-		fmt.Printf("Label: %s, Value: %d\n", nodeNameDistance.Name, nodeNameDistance.Distance)
-	}
-	fmt.Println("-------End sorted node distances-------------")
-
-	//Scoring nodes
-	var score int = 0
-	if requestFromNode == nodeName {
-		score = 100
-		fmt.Println("Requested node: ", requestFromNode, " can run the pod. Scoring node with maximum score.")
-		return 100, nil
-	} else {
-		for _, nodeNameDistance := range sortedNodeDistances {
-			//find first (with lowest distance) node that can run a pod
-			if nodeNameDistance.Name == nodeName {
-
-				score = 90 - nodeNameDistance.Distance
-				fmt.Println("Scoring node: ", nodeNameDistance.Name, " score: ", score)
-				break
-			}
-		}
-	}
-
-	fmt.Println("--------------------SCORE END-------------------------------------")
-	return int64(score), nil
+	rand.Seed(time.Now().UnixNano())
+	score := rand.Int63n(101) // Random score between 0 and 100
+	fmt.Println("Scoring node:", nodeName, "Score:", score)
+	return score, nil
 }
 
 func (p *MyK3SPlugin) ScoreExtensions() framework.ScoreExtensions {
